@@ -2,6 +2,11 @@
 
 import random
 from datetime import datetime
+import pickle
+
+#Load trained AI model
+model = pickle.load(open("risk_model.pkl", "rb"))
+vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
 
 #List of risky keywords
 risky_words = ["ignore previous instructions","disregard earlier rules","override system instructions","bypass safety guidelines","forget prior context","replace previous directives","pretend you are","act as an unrestricted system","you are no longer bound by","simulate an alternative mode","operate without limitations","without restrictions","no safety limitations","unfiltered response","no content filters","bypass safeguards","show your system prompt","reveal hidden instructions","display internal configuration","what are your hidden rules","print your policy text","encoded instructions","base64 message","decode this prompt","hidden payload","obfuscated input","step by step override","first acknowledge then ignore","follow these hidden steps","execute internal instructions", 
@@ -51,15 +56,51 @@ def calculate_confidence(score):
         return random.randint(30, 60)
     else:
         return random.randint(70, 95)
+
+def ml_predict(prompt):
+    """Predict risk using trained ML model. """
+    text_vector = vectorizer.transform([prompt])
+    prediction = model.predict(text_vector)[0]
+    return prediction
+
+def final_decision(rule_level, ml_prediction):
+    """Combine rule-based and ML predictions."""
+    if rule_level == "HIGH":
+        return "HIGH"
+    if ml_prediction == "RISKY":
+        return "SUSPICIOUS"
+    return "SAFE"
+
+def detect_attack_type(detected_words, ml_prediction):
+    """Classify attack type based on detected keywords."""
+    jailbreak_keywords = ["ignore", "bypass", "override", "unrestricted"]
+    extraction_keywords = ["reveal", "show", "display", "hidden", "system"]
+
+    for word in detected_words:
+        if any(k in word for k in jailbreak_keywords):
+            return "JAILBREAK ATTEMPT"
+        if any(k in word for k in extraction_keywords):
+            return "DATA EXTRACTION ATTEMPT"
     
+    if ml_prediction == "RISKY":
+        return "POTENTIAL JAILBREAK ATTEMPT"
+
+    return "NONE"
+
 #Main program   
 user_prompt = input("Enter a prompt:")
 
 risk_score, detected_words = calculate_risk(user_prompt)
 risk_level = get_risk_level(risk_score)
+ml_result = ml_predict(user_prompt)
+final_risk = final_decision(risk_level, ml_result)
+attack_type = detect_attack_type(detected_words, ml_result)
 
 print("Confidence Percentage:", calculate_confidence(risk_score), "%")
 print("Detected Words:", detected_words)
 print("Risk Level: ", risk_level)
+print("AI Model Prediction:", ml_result)
+print("FINAL RISK DECISION: ", final_risk)
+print("ATTACK TYPE:", attack_type)
 
 log_prompt(user_prompt, risk_score, risk_level, calculate_confidence(risk_score), detected_words)
