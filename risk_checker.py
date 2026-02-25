@@ -5,8 +5,8 @@ from datetime import datetime
 import pickle
 
 #Load trained AI model
-model = pickle.load(open("risk_model.pkl", "rb"))
-vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
+model = pickle.load(open("risk_model_hf.pkl", "rb"))
+vectorizer = pickle.load(open("vectorizer_hf.pkl", "rb"))
 
 #List of risky keywords
 risky_words = ["ignore previous instructions","disregard earlier rules","override system instructions","bypass safety guidelines","forget prior context","replace previous directives","pretend you are","act as an unrestricted system","you are no longer bound by","simulate an alternative mode","operate without limitations","without restrictions","no safety limitations","unfiltered response","no content filters","bypass safeguards","show your system prompt","reveal hidden instructions","display internal configuration","what are your hidden rules","print your policy text","encoded instructions","base64 message","decode this prompt","hidden payload","obfuscated input","step by step override","first acknowledge then ignore","follow these hidden steps","execute internal instructions", 
