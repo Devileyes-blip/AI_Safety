@@ -1,6 +1,5 @@
 '''This file is to create the main function of the risk checker, which will be used to check the risk of the prompt.'''
 
-import random
 from datetime import datetime
 import pickle
 
@@ -9,19 +8,52 @@ model = pickle.load(open("risk_model_hf.pkl", "rb"))
 vectorizer = pickle.load(open("vectorizer_hf.pkl", "rb"))
 
 #List of risky keywords
-risky_words = ["ignore previous instructions","disregard earlier rules","override system instructions","bypass safety guidelines","forget prior context","replace previous directives","pretend you are","act as an unrestricted system","you are no longer bound by","simulate an alternative mode","operate without limitations","without restrictions","no safety limitations","unfiltered response","no content filters","bypass safeguards","show your system prompt","reveal hidden instructions","display internal configuration","what are your hidden rules","print your policy text","encoded instructions","base64 message","decode this prompt","hidden payload","obfuscated input","step by step override","first acknowledge then ignore","follow these hidden steps","execute internal instructions", 
-               "forget your previous instructions"
-]
+risky_patterns = {
+    # High severity (3)
+    "ignore previous instructions": 3,
+    "forget your previous instructions": 3,
+    "override system instructions": 3,
+    "reveal hidden instructions": 3,
+    "show your system prompt": 3,
+    "display internal configuration": 3,
+    "print your policy text": 3,
+    "execute internal instructions": 3,
+    "what are your hidden rules": 3,
+        # Medium severity (2)
+    "disregard earlier rules": 2,
+    "bypass safety guidelines": 2,
+    "replace previous directives": 2,
+    "you are no longer bound by": 2,
+    "simulate an alternative mode": 2,
+    "bypass safeguards": 2,
+    "step by step override": 2,
+    "follow these hidden steps": 2,
+        # Low severity (1)
+    "pretend you are": 1,
+    "act as an unrestricted system": 1,
+    "operate without limitations": 1,
+    "without restrictions": 1,
+    "no safety limitations": 1,
+    "unfiltered response": 1,
+    "no content filters": 1,
+    "encoded instructions": 1,
+    "base64 message": 1,
+    "decode this prompt": 1,
+    "hidden payload": 1,
+    "obfuscated input": 1,
+    "first acknowledge then ignore": 1,
+    "forget prior context": 1
+}
 
-def log_prompt(prompt, score, level, confidence, detected_words):
+def log_prompt(prompt, final_score, final_level, action, attack_type):
     '''This function logs the prompt, risk score, risk level, confidence percentage, and detected words to a file.'''
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_entry = ( f"\n [{timestamp}]\n" 
                   f"Prompt: {prompt}\n"
-                  f"Risk Score: {score}\n"
-                  f"Risk level: {level}\n"
-                  f"Confidence: {confidence}%\n"
-                  f"Detected Words: {detected_words if detected_words else 'None'}"
+                  f"Risk Score: {final_score}\n"
+                  f"Risk level: {final_level}\n"
+                  f"Action: {action}%\n"
+                  f"Attack Type: {attack_type}\n"
                   f"{'-'*50}\n"
                   )
     with open("prompt_logs.txt", "a", encoding = "utf-8") as file:
@@ -33,43 +65,66 @@ def calculate_risk(prompt):
     prompt = prompt.lower()
     score = 0
     detected_words = [] 
-    for word in risky_words:
-        if word in prompt:
-            detected_words.append(word)
-            score += 1    
+    for pattern, weight in risky_patterns.items():
+        if pattern in prompt:
+            detected_words.append(pattern)
+            score += weight    
     return score, detected_words
     
-def get_risk_level(score):
+def get_final_risk_level(score):
     '''This function takes the risk score as input and returns the risk level as output.'''
-    if score == 0:
+    if score < 30:
         return "SAFE"
-    elif score <= 2:
+    elif score < 60:
         return "SUSPICIOUS"
     else:
         return "HIGH RISK"
 
-def calculate_confidence(score):
-    '''This function takes the detected words as input and calculates the confidence percentage.'''
-    if score ==0:
-        return random.randint(0, 10)
-    elif score <= 2:
-        return random.randint(30, 60)
+def enforcement_action(score):
+    '''Pre-LLM Prevention'''
+    if score >= 60:
+        return "BLOCK"
+    elif attack_type != "NONE":
+        return "REVIEW"
+    elif score >= 30:
+        return "REVIEW"
     else:
-        return random.randint(70, 95)
+        return "ALLOW"
 
-def ml_predict(prompt):
+def compute_final_risk(rule_score, ml_probability):
+    '''To calculate the probability final_score'''
+    rule_component = min(rule_score / 5, 1.0)
+
+    # If no rule signals, reduce ML influence slightly
+    if rule_score == 0:
+        ml_weight = 0.4
+        rule_weight = 0.2
+    else:
+        ml_weight = 0.55
+        rule_weight = 0.35
+
+    agreement_bonus = 0
+    if rule_component > 0.5 and ml_probability > 0.6:
+        agreement_bonus = 0.1
+
+    final_score = (
+        0.35 * rule_component +
+        0.55 * ml_probability +
+        agreement_bonus
+    )
+
+    return round(min(final_score, 1.0) * 100, 2)
+
+def normalize_rule_score(score):
+    max_possible = 10  # adjustable calibration
+    return min(score / max_possible, 1.0)
+
+def ml_predict_proba(prompt):
     """Predict risk using trained ML model. """
     text_vector = vectorizer.transform([prompt])
-    prediction = model.predict(text_vector)[0]
-    return prediction
+    probability = model.predict_proba(text_vector)[0][1]
+    return probability
 
-def final_decision(rule_level, ml_prediction):
-    """Combine rule-based and ML predictions."""
-    if rule_level == "HIGH":
-        return "HIGH"
-    if ml_prediction == "RISKY":
-        return "SUSPICIOUS"
-    return "SAFE"
 
 def detect_attack_type(detected_words, ml_prediction):
     """Classify attack type based on detected keywords."""
@@ -88,19 +143,24 @@ def detect_attack_type(detected_words, ml_prediction):
     return "NONE"
 
 #Main program   
-user_prompt = input("Enter a prompt:")
+user_prompt = input("Enter a prompt: ")
 
-risk_score, detected_words = calculate_risk(user_prompt)
-risk_level = get_risk_level(risk_score)
-ml_result = ml_predict(user_prompt)
-final_risk = final_decision(risk_level, ml_result)
-attack_type = detect_attack_type(detected_words, ml_result)
+rule_score, detected_words = calculate_risk(user_prompt)
 
-print("Confidence Percentage:", calculate_confidence(risk_score), "%")
-print("Detected Words:", detected_words)
-print("Risk Level: ", risk_level)
-print("AI Model Prediction:", ml_result)
-print("FINAL RISK DECISION: ", final_risk)
+ml_probability = ml_predict_proba(user_prompt)
+
+final_score = compute_final_risk(rule_score, ml_probability)
+final_level = get_final_risk_level(final_score)
+action = enforcement_action(final_score)
+
+attack_type = detect_attack_type(detected_words, ml_probability)
+
+print("\nDetected Patterns:", detected_words)
+print("Rule Score:", rule_score)
+print("ML Injection Probability:", round(ml_probability * 100, 2), "%")
+print("FINAL RISK SCORE:", final_score)
+print("FINAL RISK LEVEL:", final_level)
+print("ENFORCEMENT ACTION:", action)
 print("ATTACK TYPE:", attack_type)
 
-log_prompt(user_prompt, risk_score, risk_level, calculate_confidence(risk_score), detected_words)
+log_prompt(user_prompt, final_score, final_level, action, attack_type)

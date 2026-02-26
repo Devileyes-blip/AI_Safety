@@ -2,3 +2,10 @@ prompt_logs.txt
 venv/
 __pycache__/
 *.pyc
+*.parquet
+*.pkl
+*.csv
+*.pt
+*.bin
+*.joblib
+data/
