@@ -1,7 +1,8 @@
 '''This file is to create the main function of the risk checker, which will be used to check the risk of the prompt.'''
 
 from datetime import datetime
-import pickle
+import pickle,re
+import unicodedata
 
 #Load trained AI model
 model = pickle.load(open("risk_model_hf.pkl", "rb"))
@@ -84,8 +85,6 @@ def enforcement_action(score):
     '''Pre-LLM Prevention'''
     if score >= 60:
         return "BLOCK"
-    elif attack_type != "NONE":
-        return "REVIEW"
     elif score >= 30:
         return "REVIEW"
     else:
@@ -125,6 +124,36 @@ def ml_predict_proba(prompt):
     probability = model.predict_proba(text_vector)[0][1]
     return probability
 
+def normalize_text(text):
+    
+    text = text.lower()
+
+    # unicode normalization
+    text = unicodedata.normalize("NFKD", text)
+
+    # leetspeak replacements
+    leet_map = {
+        "0": "o",
+        "1": "i",
+        "3": "e",
+        "4": "a",
+        "5": "s",
+        "7": "t",
+        "$": "s",
+        "@": "a",
+        "!": "i"
+    }
+
+    for k, v in leet_map.items():
+        text = text.replace(k, v)
+
+    # remove punctuation
+    text = re.sub(r'[^a-z0-9\s]', '', text)
+
+    # collapse spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
 
 def detect_attack_type(detected_words, ml_prediction):
     """Classify attack type based on detected keywords."""
@@ -147,7 +176,8 @@ user_prompt = input("Enter a prompt: ")
 
 rule_score, detected_words = calculate_risk(user_prompt)
 
-ml_probability = ml_predict_proba(user_prompt)
+normalized_prompt = normalize_text(user_prompt)
+ml_probability = ml_predict_proba(normalized_prompt)
 
 final_score = compute_final_risk(rule_score, ml_probability)
 final_level = get_final_risk_level(final_score)
@@ -156,6 +186,7 @@ action = enforcement_action(final_score)
 attack_type = detect_attack_type(detected_words, ml_probability)
 
 print("\nDetected Patterns:", detected_words)
+print("Normalized Prompt:", normalized_prompt)
 print("Rule Score:", rule_score)
 print("ML Injection Probability:", round(ml_probability * 100, 2), "%")
 print("FINAL RISK SCORE:", final_score)
