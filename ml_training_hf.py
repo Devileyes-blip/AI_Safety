@@ -1,172 +1,22 @@
 from datasets import load_dataset
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.pipeline import FeatureUnion
-import pickle
 
-# =========================================
-# 1️⃣ Load Deepset Dataset
-# =========================================
+prompts = []
 
-ds1 = load_dataset("deepset/prompt-injections")
-df1 = ds1["train"].to_pandas()
-df1 = df1[["text", "label"]]
+ds = load_dataset("allenai/real-toxicity-prompts", split="train")
 
-print("Deepset dataset size:", df1.shape)
+for example in ds:
 
+    prompt_text = example
 
-# =========================================
-# 2️⃣ Load AiActivity Jailbreak Dataset
-# =========================================
+    if prompt_text and len(prompt_text) > 10:
+        prompts.append(prompt_text)
 
-df2_part1 = pd.read_parquet("data/0000.parquet")
-df2_part2 = pd.read_parquet("data/0001.parquet")
+prompts = list(set(prompts))
 
-df2 = pd.concat([df2_part1, df2_part2], ignore_index=True)
+print("Total prompts:", len(prompts))
 
-df2 = df2[["prompt", "type"]]
-df2.rename(columns={"prompt": "text"}, inplace=True)
+with open("adversarial_prompts.txt", "w", encoding="utf-8") as f:
+    for p in prompts:
+        f.write(p.replace("\n", " ") + "\n")
 
-df2["label"] = df2["type"].apply(lambda x: 1 if x == "jailbreak" else 0)
-df2 = df2[["text", "label"]]
-
-print("AiActivity dataset size:", df2.shape)
-
-# =========================================
-# Safe-Guard-prompt-injection
-# =========================================
-ds3 = load_dataset("xTRam1/safe-guard-prompt-injection")
-df3 = ds3["train"].to_pandas()
-df3 = df3[["text", "label"]]
-
-print("Safe Guard dataset size:", df3.shape)
-
-# =========================================
-# Mosscap-Prompt-injection
-# =========================================
-
-ds4 = load_dataset("Lakera/mosscap_prompt_injection", split="train")
-df4 = ds4.to_pandas()
-
-df4 = df4[["prompt"]]
-df4["label"] = 1
-df4.rename(columns={"prompt": "text"}, inplace=True)
-
-print("Mosscap dataset size:", df4.shape)
-
-# =========================================
-# Dolly Safe Prompts
-# =========================================
-
-dolly = load_dataset("databricks/databricks-dolly-15k")["train"].to_pandas()
-df5 = dolly[["instruction"]]
-df5["label"] = 0
-
-# =========================================
-# Stanford Alpaca
-# =========================================
-
-alpaca = load_dataset("tatsu-lab/alpaca")["train"].to_pandas()
-df6 = alpaca[["instruction"]]
-df6["label"] = 0
-
-# =========================================
-# OpenAssistant 
-# =========================================
-
-OpenAssistant = load_dataset("OpenAssistant/oasst1")["train"].to_pandas()
-df_7 = OpenAssistant[OpenAssistant["role"] == "prompter"]
-df7 = df_7[["text"]]
-df7["label"] = 0
-
-# =========================================
-# 3️⃣ Merge Datasets
-# =========================================
-
-df = pd.concat([df1, df2, df3, df4, df5, df6, df7], ignore_index=True)
-
-#Remove or replace NaN prompts
-df.dropna(subset = ["text"])
-
-#Convert Everything to String
-df["text"] = df["text"].astype(str)
-
-# Remove duplicates
-df.drop_duplicates(subset=["text"], inplace=True)
-
-print("Merged dataset size:", df.shape)
-print("Label distribution:\n", df["label"].value_counts())
-
-
-# =========================================
-# 4️⃣ Train/Test Split
-# =========================================
-
-X_train, X_test, y_train, y_test = train_test_split(
-    df["text"],
-    df["label"],
-    test_size=0.2,
-    random_state=42,
-    stratify=df["label"]
-)
-
-print("Train size:", len(X_train))
-print("Test size:", len(X_test))
-
-
-# =========================================
-# 5️⃣ TF-IDF Vectorization
-# =========================================
-
-word_vectorizer = TfidfVectorizer(
-    analyzer="word",
-    ngram_range=(1,2),
-    stop_words="english",
-    max_features=20000
-)
-
-char_vectorizer = TfidfVectorizer(
-    stop_words="english",
-    analyzer= "char_wb",
-    ngram_range=(3, 5),
-    max_features=20000
-)
-
-vectorizer = FeatureUnion([
-    ("word_features", word_vectorizer),
-    ("char_features", char_vectorizer)])
-
-X_train_vec = vectorizer.fit_transform(X_train)
-X_test_vec = vectorizer.transform(X_test)
-
-
-# =========================================
-# 6️⃣ Train Logistic Regression
-# =========================================
-
-model = LogisticRegression(max_iter=2000, class_weight="balanced")
-model.fit(X_train_vec, y_train)
-
-
-# =========================================
-# 7️⃣ Evaluate Model
-# =========================================
-
-predictions = model.predict(X_test_vec)
-
-print("\nAccuracy:", accuracy_score(y_test, predictions))
-print("\nClassification Report:\n")
-print(classification_report(y_test, predictions))
-
-
-# =========================================
-# 8️⃣ Save Model
-# =========================================
-
-pickle.dump(model, open("risk_model_hf.pkl", "wb"))
-pickle.dump(vectorizer, open("vectorizer_hf.pkl", "wb"))
-
-print("\nMerged model trained and saved successfully!")
+print("File created successfully")

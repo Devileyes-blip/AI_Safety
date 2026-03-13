@@ -171,27 +171,54 @@ def detect_attack_type(detected_words, ml_prediction):
 
     return "NONE"
 
-#Main program   
-user_prompt = input("Enter a prompt: ")
+def analyze_prompt(prompt):
 
-rule_score, detected_words = calculate_risk(user_prompt)
+    # normalization
+    normalized_prompt = normalize_text(prompt)
 
-normalized_prompt = normalize_text(user_prompt)
-ml_probability = ml_predict_proba(normalized_prompt)
+    # rule detection
+    rule_score, detected_words = calculate_risk(normalized_prompt)
 
-final_score = compute_final_risk(rule_score, ml_probability)
-final_level = get_final_risk_level(final_score)
-action = enforcement_action(final_score)
+    # ML prediction
+    ml_probability = ml_predict_proba(normalized_prompt)
 
-attack_type = detect_attack_type(detected_words, ml_probability)
+    # combine scores
+    final_score = compute_final_risk(rule_score, ml_probability)
 
-print("\nDetected Patterns:", detected_words)
-print("Normalized Prompt:", normalized_prompt)
-print("Rule Score:", rule_score)
-print("ML Injection Probability:", round(ml_probability * 100, 2), "%")
-print("FINAL RISK SCORE:", final_score)
-print("FINAL RISK LEVEL:", final_level)
-print("ENFORCEMENT ACTION:", action)
-print("ATTACK TYPE:", attack_type)
+    risk_level = get_final_risk_level(final_score)
+    action = enforcement_action(final_score)
 
-log_prompt(user_prompt, final_score, final_level, action, attack_type)
+    attack_type = detect_attack_type(detected_words, ml_probability)
+
+    return {
+        "risk_level": risk_level,
+        "final_score": final_score,
+        "action": action,
+        "attack_type": attack_type
+    }
+
+#Main program
+if __name__ == "__main__":
+    user_prompt = input("Enter a prompt: ")
+
+    rule_score, detected_words = calculate_risk(user_prompt)
+
+    normalized_prompt = normalize_text(user_prompt)
+    ml_probability = ml_predict_proba(normalized_prompt)
+
+    final_score = compute_final_risk(rule_score, ml_probability)
+    final_level = get_final_risk_level(final_score)
+    action = enforcement_action(final_score)
+
+    attack_type = detect_attack_type(detected_words, ml_probability)
+
+    print("\nDetected Patterns:", detected_words)
+    print("Normalized Prompt:", normalized_prompt)
+    print("Rule Score:", rule_score)
+    print("ML Injection Probability:", round(ml_probability * 100, 2), "%")
+    print("FINAL RISK SCORE:", final_score)
+    print("FINAL RISK LEVEL:", final_level)
+    print("ENFORCEMENT ACTION:", action)
+    print("ATTACK TYPE:", attack_type)
+
+    log_prompt(user_prompt, final_score, final_level, action, attack_type)
