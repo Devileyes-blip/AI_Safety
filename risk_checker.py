@@ -74,18 +74,18 @@ def calculate_risk(prompt):
     
 def get_final_risk_level(score):
     '''This function takes the risk score as input and returns the risk level as output.'''
-    if score < 30:
+    if score < 40:
         return "SAFE"
-    elif score < 60:
+    elif score < 70:
         return "SUSPICIOUS"
     else:
         return "HIGH RISK"
 
 def enforcement_action(score):
     '''Pre-LLM Prevention'''
-    if score >= 60:
+    if score >= 70:
         return "BLOCK"
-    elif score >= 30:
+    elif score >= 40:
         return "REVIEW"
     else:
         return "ALLOW"
@@ -111,6 +111,7 @@ def compute_final_risk(rule_score, ml_probability):
         0.55 * ml_probability +
         agreement_bonus
     )
+    
 
     return round(min(final_score, 1.0) * 100, 2)
 
