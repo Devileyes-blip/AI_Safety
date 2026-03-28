@@ -1,3 +1,4 @@
+import requests
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -9,6 +10,20 @@ app = FastAPI(title="Prompt Injection Detector API")
 
 class PromptRequest(BaseModel):
     prompt: str
+
+
+def call_llm(prompt: str) -> str:
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "mistral",
+            "prompt": prompt,
+            "stream": False
+        },
+        timeout=60
+    )
+    response.raise_for_status()
+    return response.json()["response"]
 
 
 @app.post("/check_prompt")
@@ -39,8 +54,11 @@ def check_prompt(request: PromptRequest):
             content=response_body
         )
 
+    llm_response = call_llm(request.prompt)
+
     response_body["status"] = "allowed"
     response_body["message"] = "Prompt is safe to process."
+    response_body["llm_response"] = llm_response
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content=response_body
